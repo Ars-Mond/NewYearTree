@@ -7,6 +7,7 @@ import time
 import random as r
 from enum import Enum
 from ctypes import *
+import shutil
 
 STD_OUTPUT_HANDLE = -11
 
@@ -93,18 +94,23 @@ class CharVector2:
 
 
 def print_at(x: int, y: int, s: str, size: list | tuple = None, *, lang: str = 'ru'):
+    """Print string ``s`` at position ``x``, ``y``.
+
+    Works on both Windows and POSIX terminals. For non-Windows platforms ANSI
+    escape codes are used to move the cursor.
+    """
     x = int(x)
     y = int(y)
-    if sys.platform == 'win32':
-        if size is not None:
-            x = x % size[0]
-            y = y % size[1]
 
+    if size is not None:
+        x = x % size[0]
+        y = y % size[1]
+
+    if sys.platform.startswith('win'):
         h = windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
         coord = COORD(c_short(x), c_short(y))
         windll.kernel32.SetConsoleCursorPosition(h, coord)
 
-        c = None
         if lang == 'ru':
             c = s.encode("cp866", errors="ignore")
         else:
@@ -112,10 +118,12 @@ def print_at(x: int, y: int, s: str, size: list | tuple = None, *, lang: str = '
 
         windll.kernel32.WriteConsoleA(h, c_char_p(c), len(c), None, None)
     else:
-        print('This system is not win32 / win64')
+        # ANSI escape sequence: move cursor and print
+        sys.stdout.write(f"\033[{y + 1};{x + 1}H{s}")
+        sys.stdout.flush()
 
 def get_size_console():
-    if sys.platform == 'win32':
+    if sys.platform.startswith('win'):
         h = windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
         csbi = create_string_buffer(22)
         res = windll.kernel32.GetConsoleScreenBufferInfo(h, csbi)
@@ -131,15 +139,16 @@ def get_size_console():
         return size_x, size_y
 
     else:
-        print('This system is not win32 / win64')
+        size = shutil.get_terminal_size(fallback=(80, 24))
+        return size.columns, size.lines
 
 def print_clear_area(size_area: list[int, int], *, char: str = ' ', sleep: int = 0):
-    if sys.platform == 'win32':
-        for i in range(size_area[1]):
-            if sleep > 0:
-                time.sleep(sleep)
-            for j in range(size_area[0]):
-                print_at(j, i, char)
+    """Fill the console with ``char`` using ``print_at``."""
+    for i in range(size_area[1]):
+        if sleep > 0:
+            time.sleep(sleep)
+        for j in range(size_area[0]):
+            print_at(j, i, char)
 
 
 def tree(count: int = 7, *, center_char: str = '*', slash_char: str = '/', alt_slash_char: str = '\\', fill_char: str = '0', tree_char: str = '-', offset: list[int, int] = None):
@@ -213,9 +222,17 @@ def set_color_str(s: str, color: Color):
     return color.value + s + Color.RESET.value
 
 
+def clear_console():
+    """Clear terminal screen on any platform."""
+    if sys.platform.startswith('win'):
+        os.system('cls')
+    else:
+        os.system('clear')
+
+
 
 if __name__ == '__main__':
-    os.system('cls')
+    clear_console()
 
     size = get_size_console()
     print(size)
@@ -234,7 +251,7 @@ if __name__ == '__main__':
     print(out)
 
     time.sleep(0.2)
-    os.system('cls')
+    clear_console()
     print_clear_area(size)
 
     g = 0
